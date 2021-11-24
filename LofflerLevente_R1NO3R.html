@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="hu">
+
+<head>
+    <meta charset=utf-8>
+    <title>Vasúti Terepasztal</title>
+    <style>
+        body
+        {
+            margin: 0;
+            overflow: hidden;
+        }
+
+        canvas
+        {
+            width: 100%;
+            height: 100%
+        }
+    </style>
+</head>
+
+<body>
+<script type="module">
+    import * as THREE from './js-r132/build/three.module.js';
+    import {TrackballControls} from './js-r132/examples/jsm/controls/TrackballControls.js';
+
+
+    class UpdaterCollection
+    {
+        #_updaters = new Map();
+
+
+        Register(object, updater)
+        {
+            if (typeof object !== typeof THREE.Object3D)
+            {
+                throw "Trying to register updater on an invalid object...";
+            }
+
+            if (typeof updater !== "function")
+            {
+                throw "Trying to register an invalid updater...";
+            }
+
+            if (this.#_updaters.has(object))
+            {
+                this.#_updaters.get(object).add(updater);
+            }
+            else
+            {
+                this.#_updaters.updaters.set(object, [updater]);
+            }
+        }
+
+
+        Run()
+        {
+            for (const [object, updaterList] of this.#_updaters)
+            {
+                for (const updater of updaterList)
+                {
+                    updater(object);
+                }
+            }
+        }
+    }
+
+
+    function CreateRenderer()
+    {
+        const renderer = new THREE.WebGLRenderer({antialias: true});
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setClearColor(0x000000);
+        document.body.appendChild(renderer.domElement);
+        return renderer;
+    }
+
+
+    function CreateCamera(positionX, positionY, positionZ, target)
+    {
+        const camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(positionX, positionY, positionZ);
+        camera.lookAt(target);
+        return camera;
+    }
+
+
+    function CreateControls(camera, domElement)
+    {
+        const controls = new TrackballControls(camera, domElement);
+        controls.rotateSpeed = 5.0;
+        controls.panSpeed = 1.0;
+        return controls;
+    }
+
+
+    function UpdateAndRender(controls, updaters, renderer, scene, camera)
+    {
+        controls.update();
+        updaters.Run();
+        renderer.render(scene, camera);
+    }
+
+
+    function CreateObjects(scene, updaters)
+    {
+        // TODO
+    }
+
+
+    function Main()
+    {
+        const renderer = CreateRenderer();
+        const scene = new THREE.Scene();
+        const camera = CreateCamera(0, 10, 20, scene.position);
+        const controls = CreateControls(camera, renderer.domElement);
+        const updaters = new UpdaterCollection();
+
+        CreateObjects(scene, updaters);
+
+        window.addEventListener('resize', () =>
+        {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+        }, false);
+
+        requestAnimationFrame(function FrameCallback()
+        {
+            requestAnimationFrame(FrameCallback);
+            UpdateAndRender(controls, updaters, renderer, scene, camera);
+        });
+    }
+
+
+    Main();
+</script>
+</body>
+</html>
