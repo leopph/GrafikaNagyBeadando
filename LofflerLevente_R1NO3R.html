@@ -23,6 +23,8 @@
 <script type="module">
     import * as THREE from './js-r132/build/three.module.js';
     import {TrackballControls} from './js-r132/examples/jsm/controls/TrackballControls.js';
+    import {OBJLoader} from "./js-r132/examples/jsm/loaders/OBJLoader.js";
+    import {MTLLoader} from "./js-r132/examples/jsm/loaders/MTLLoader.js";
 
 
     class UpdaterCollection
@@ -105,16 +107,20 @@
 
     function CreateObjects(scene, updaters)
     {
-        const groundGeom = new THREE.BoxGeometry(50, 0.01, 50);
+        const GROUND_SIZE = 50;
+        const GROUND_HEIGHT = 0.1;
+        const GROUND_DIAG = GROUND_SIZE * Math.sqrt(2);
+        const GROUND_HALF_DIAG = GROUND_DIAG / 2;
+
+        const groundGeom = new THREE.BoxGeometry(GROUND_SIZE, GROUND_HEIGHT, GROUND_SIZE);
         const groundMat = new THREE.MeshPhongMaterial(
             {
-                side: THREE.DoubleSide,
                 color: 0x00FF00,
                 shininess: 0,
             }
         );
         const groundMesh = new THREE.Mesh(groundGeom, groundMat);
-        groundMesh.position.setY(-0.005);
+        groundMesh.position.setY(-GROUND_HEIGHT / 2);
         groundMesh.receiveShadow = true;
         groundMesh.castShadow = true;
         scene.add(groundMesh);
@@ -125,13 +131,37 @@
         dirLight.castShadow = true;
         dirLight.shadowMapWidth = 4096;
         dirLight.shadowMapHeight = 4096;
-        const dirLightTarget = new THREE.Object3D();
-        dirLightTarget.position.set(-1, -1, 1);
-        dirLight.target = dirLightTarget;
+        dirLight.position.set(1, 1, -1);
+        dirLight.position.normalize();
+        dirLight.position.multiplyScalar(GROUND_HALF_DIAG);
         scene.add(dirLight);
-        scene.add(dirLightTarget);
         const dirLightHelper = new THREE.DirectionalLightHelper(dirLight);
         scene.add(dirLightHelper);
+        dirLight.shadow.camera = new THREE.OrthographicCamera(-GROUND_HALF_DIAG, GROUND_HALF_DIAG, GROUND_HALF_DIAG, -GROUND_HALF_DIAG, 0, GROUND_DIAG);
+
+        const loadingManager = new THREE.LoadingManager();
+
+        new MTLLoader(loadingManager)
+            .setPath("assets/loco/")
+            .load("loco.mtl", materials =>
+            {
+                materials.preload();
+                new OBJLoader(loadingManager)
+                    .setMaterials(materials)
+                    .setPath("assets/loco/")
+                    .load("loco.obj", loco =>
+                    {
+                        scene.add(loco);
+                        loco.position.set(0, 2.3, 0);
+                        loco.castShadow = true;
+                        loco.receiveShadow = true;
+                        loco.traverse(child =>
+                        {
+                           child.castShadow = true;
+                           child.receiveShadow = true;
+                        });
+                    });
+            });
 
         // Moves the dirLight's target on a circular path to simulate sun.
         updaters.Register(dirLight, dirLight =>
@@ -140,30 +170,15 @@
             {
                 dirLight.Initialized = true;
                 dirLight.AngularSpeed = 2;
-                dirLight.RotationAxis = new THREE.Vector3(-1, 0, -1).normalize();
+                dirLight.RotationAxis = new THREE.Vector3(1, 0, 1).normalize();
                 dirLight.Clock = new THREE.Clock(true);
             }
 
-            const quaternion = new THREE.Quaternion();
-            quaternion.setFromAxisAngle(dirLight.RotationAxis, THREE.MathUtils.degToRad(dirLight.AngularSpeed * dirLight.Clock.getDelta()));
-            dirLight.target.position.applyQuaternion(quaternion);
+            dirLight.position.applyAxisAngle(dirLight.RotationAxis, THREE.MathUtils.degToRad(dirLight.AngularSpeed * dirLight.Clock.getDelta()));
         });
 
         // Updates the dirLight helper.
         updaters.Register(dirLightHelper, (dirLightHelper) => dirLightHelper.update());
-
-
-        const cubeGeom = new THREE.BoxGeometry(1, 1, 1);
-        const cubeMat = new THREE.MeshPhongMaterial(
-            {
-                color: 0x7F7F7F
-            }
-        );
-        const cubeMesh = new THREE.Mesh(cubeGeom, cubeMat);
-        cubeMesh.castShadow = true;
-        cubeMesh.receiveShadow = true;
-        cubeMesh.position.set(0, 0.5, 0);
-        scene.add(cubeMesh);
     }
 
 
