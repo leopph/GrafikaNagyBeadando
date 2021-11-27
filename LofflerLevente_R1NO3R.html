@@ -32,7 +32,7 @@
 
         Register(object, updater)
         {
-            if (typeof object !== typeof THREE.Object3D)
+            if (!(object instanceof THREE.Object3D))
             {
                 throw "Trying to register updater on an invalid object...";
             }
@@ -48,7 +48,7 @@
             }
             else
             {
-                this.#_updaters.updaters.set(object, [updater]);
+                this.#_updaters.set(object, [updater]);
             }
         }
 
@@ -71,6 +71,7 @@
         const renderer = new THREE.WebGLRenderer({antialias: true});
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setClearColor(0x000000);
+        renderer.shadowMapEnabled = true;
         document.body.appendChild(renderer.domElement);
         return renderer;
     }
@@ -104,7 +105,65 @@
 
     function CreateObjects(scene, updaters)
     {
-        // TODO
+        const groundGeom = new THREE.BoxGeometry(50, 0.01, 50);
+        const groundMat = new THREE.MeshPhongMaterial(
+            {
+                side: THREE.DoubleSide,
+                color: 0x00FF00,
+                shininess: 0,
+            }
+        );
+        const groundMesh = new THREE.Mesh(groundGeom, groundMat);
+        groundMesh.position.setY(-0.005);
+        groundMesh.receiveShadow = true;
+        groundMesh.castShadow = true;
+        scene.add(groundMesh);
+
+        scene.add(new THREE.AmbientLight(0xFFFFFF, 0.1));
+
+        const dirLight = new THREE.DirectionalLight(0xFFFFFF, 0.5);
+        dirLight.castShadow = true;
+        dirLight.shadowMapWidth = 4096;
+        dirLight.shadowMapHeight = 4096;
+        const dirLightTarget = new THREE.Object3D();
+        dirLightTarget.position.set(-1, -1, 1);
+        dirLight.target = dirLightTarget;
+        scene.add(dirLight);
+        scene.add(dirLightTarget);
+        const dirLightHelper = new THREE.DirectionalLightHelper(dirLight);
+        scene.add(dirLightHelper);
+
+        // Moves the dirLight's target on a circular path to simulate sun.
+        updaters.Register(dirLight, dirLight =>
+        {
+            if (dirLight.Initialized !== true)
+            {
+                dirLight.Initialized = true;
+                dirLight.AngularSpeed = 2;
+                dirLight.RotationAxis = new THREE.Vector3(-1, 0, -1).normalize();
+                dirLight.Clock = new THREE.Clock(true);
+            }
+
+            const quaternion = new THREE.Quaternion();
+            quaternion.setFromAxisAngle(dirLight.RotationAxis, THREE.MathUtils.degToRad(dirLight.AngularSpeed * dirLight.Clock.getDelta()));
+            dirLight.target.position.applyQuaternion(quaternion);
+        });
+
+        // Updates the dirLight helper.
+        updaters.Register(dirLightHelper, (dirLightHelper) => dirLightHelper.update());
+
+
+        const cubeGeom = new THREE.BoxGeometry(1, 1, 1);
+        const cubeMat = new THREE.MeshPhongMaterial(
+            {
+                color: 0x7F7F7F
+            }
+        );
+        const cubeMesh = new THREE.Mesh(cubeGeom, cubeMat);
+        cubeMesh.castShadow = true;
+        cubeMesh.receiveShadow = true;
+        cubeMesh.position.set(0, 0.5, 0);
+        scene.add(cubeMesh);
     }
 
 
