@@ -107,6 +107,7 @@
 
     function CreateObjects(scene, updaters)
     {
+        // GROUND
         const GROUND_SIZE = 50;
         const GROUND_HEIGHT = 0.1;
         const GROUND_DIAG = GROUND_SIZE * Math.sqrt(2);
@@ -125,8 +126,14 @@
         groundMesh.castShadow = true;
         scene.add(groundMesh);
 
+
+
+        // AMBIENT LIGHT
         scene.add(new THREE.AmbientLight(0xFFFFFF, 0.1));
 
+
+
+        // DIRLIGHT
         const dirLight = new THREE.DirectionalLight(0xFFFFFF, 0.5);
         dirLight.castShadow = true;
         dirLight.shadowMapWidth = 4096;
@@ -139,8 +146,28 @@
         scene.add(dirLightHelper);
         dirLight.shadow.camera = new THREE.OrthographicCamera(-GROUND_HALF_DIAG, GROUND_HALF_DIAG, GROUND_HALF_DIAG, -GROUND_HALF_DIAG, 0, GROUND_DIAG);
 
-        const loadingManager = new THREE.LoadingManager();
+        // Moves the dirLight's target on a circular path to simulate sun.
+        updaters.Register(dirLight, dirLight =>
+        {
+            if (dirLight.Initialized !== true)
+            {
+                dirLight.Initialized = true;
+                dirLight.AngularSpeed = 2;
+                dirLight.RotationAxis = new THREE.Vector3(1, 0, 1).normalize();
+                dirLight.Clock = new THREE.Clock(true);
+            }
 
+            dirLight.position.applyAxisAngle(dirLight.RotationAxis, THREE.MathUtils.degToRad(dirLight.AngularSpeed * dirLight.Clock.getDelta()));
+        });
+
+        // Updates the dirLight helper.
+        updaters.Register(dirLightHelper, (dirLightHelper) => dirLightHelper.update());
+
+
+
+
+        // LOCO MODEL
+        const loadingManager = new THREE.LoadingManager();
         new MTLLoader(loadingManager)
             .setPath("assets/loco/")
             .load("loco.mtl", materials =>
@@ -163,22 +190,67 @@
                     });
             });
 
-        // Moves the dirLight's target on a circular path to simulate sun.
-        updaters.Register(dirLight, dirLight =>
-        {
-            if (dirLight.Initialized !== true)
-            {
-                dirLight.Initialized = true;
-                dirLight.AngularSpeed = 2;
-                dirLight.RotationAxis = new THREE.Vector3(1, 0, 1).normalize();
-                dirLight.Clock = new THREE.Clock(true);
-            }
 
-            dirLight.position.applyAxisAngle(dirLight.RotationAxis, THREE.MathUtils.degToRad(dirLight.AngularSpeed * dirLight.Clock.getDelta()));
+
+        // RAIL BLOCK MODEL
+        const RAILBOARD_WIDTH = 4;
+        const RAILBOARD_HEIGHT = 0.1;
+        const RAILBOARD_DEPTH = 1;
+        const RAILBOARD_SPACING = 0.4;
+        const RAIL_WIDTH = 0.1;
+        const RAIL_HEIGHT = 0.25;
+        const RAIL_DEPTH = RAILBOARD_DEPTH + 2 * RAILBOARD_SPACING;
+        const RAILBLOCK_WIDTH = RAILBOARD_WIDTH;
+        const RAILBLOCK_HEIGHT = RAIL_HEIGHT + RAILBOARD_HEIGHT;
+        const RAILBLOCK_DEPTH = RAIL_DEPTH;
+
+        const railGeom = new THREE.BoxGeometry(RAIL_WIDTH, RAIL_HEIGHT, RAIL_DEPTH);
+        const railMat = new THREE.MeshPhongMaterial(
+            {
+                color: 0x7F7F7F,
+                shininess: 50,
+                specular: 0xFFFFFF
+            }
+        )
+        const rightRailMesh = new THREE.Mesh(railGeom, railMat);
+        rightRailMesh.position.set(RAILBOARD_WIDTH * 0.39, RAILBOARD_HEIGHT + RAIL_HEIGHT * 0.5, 0);
+
+        const leftRailMesh = rightRailMesh.clone();
+        leftRailMesh.position.setX(-rightRailMesh.position.x);
+
+        const boardGeom = new THREE.BoxGeometry(RAILBOARD_WIDTH, RAILBOARD_HEIGHT, RAILBOARD_DEPTH);
+        const boardMat = new THREE.MeshPhongMaterial(
+            {
+                color: 0xFF7F7F,
+                shininess: 0
+            }
+        )
+        const boardMesh = new THREE.Mesh(boardGeom, boardMat);
+        boardMesh.position.setZ(RAIL_DEPTH * 0.5 - RAILBOARD_DEPTH / 2 - RAILBOARD_SPACING)
+        boardMesh.position.setY(RAILBOARD_HEIGHT * 0.5);
+
+        const railBlock = new THREE.Group();
+        railBlock.attach(leftRailMesh);
+        railBlock.attach(rightRailMesh);
+        railBlock.attach(boardMesh);
+        railBlock.traverse(child =>
+        {
+            child.receiveShadow = true;
+            child.castShadow = true;
         });
 
-        // Updates the dirLight helper.
-        updaters.Register(dirLightHelper, (dirLightHelper) => dirLightHelper.update());
+        for (let i = 0; i < 30; i++)
+        {
+            let railCopy = railBlock.clone();
+            railCopy.position.setZ(-25 + i * RAILBLOCK_DEPTH);
+            scene.add(railCopy);
+        }
+
+        new THREE.TextureLoader().load("assets/rails/wood.jpg", texture =>
+        {
+            boardMat.map = texture;
+            boardMat.needsUpdate = true;
+        });
     }
 
 
