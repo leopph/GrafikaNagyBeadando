@@ -79,7 +79,7 @@
 
         static SetKey(key, state)
         {
-            if (state === Input.DOWN && Input.#m_Keys.get(key) === Input.DOWN)
+            if (state === Input.DOWN && (Input.#m_Keys.get(key) === Input.DOWN || Input.#m_Keys.get(key) === Input.HELD))
             {
                 Input.#m_Keys.set(key, Input.HELD);
             }
@@ -89,18 +89,36 @@
             }
         }
 
-        static KeyIsPressed(key)
+        // Returns true if the key was pressed down in this frame.
+        static KeyIsDown(key)
         {
             return Input.#m_Keys.get(key) === Input.DOWN || Input.#m_Keys.get(key) === Input.HELD;
         }
 
-        static UpdateUppedKeys()
+        // Returns true if the key was pressed down in this frame or if it is held during the frame.
+        static KeyWasPressed(key)
+        {
+            return Input.#m_Keys.get(key) === Input.DOWN;
+        }
+
+        /// Returns true if the key was released in this frame.
+        static KeyWasReleased(key)
+        {
+            return Input.#m_Keys.get(key) === Input.UP;
+        }
+
+        // Sets UP keys to RELEASE and DOWN keys to HELD
+        static UpdateKeys()
         {
             Input.#m_Keys.forEach((value, key) =>
             {
                 if (value === Input.UP)
                 {
                     Input.#m_Keys.set(key, Input.RELEASED);
+                }
+                else if (value === Input.DOWN)
+                {
+                    Input.#m_Keys.set(key, Input.HELD);
                 }
             });
         }
@@ -156,33 +174,43 @@
     function UpdateAndRender(controls, updaters, renderer, scene, camera)
     {
         controls.update();
-        Time.Update();
-        Input.UpdateUppedKeys();
         updaters.Run();
         renderer.render(scene, camera);
+        Time.Update();
+        Input.UpdateKeys();
     }
 
 
     function CreateObjects(scene, updaters)
     {
         // GROUND
-        const GROUND_SIZE = 50;
+        const GROUND_SIZE = 60;
         const GROUND_HEIGHT = 0.1;
         const GROUND_DIAG = GROUND_SIZE * Math.sqrt(2);
         const GROUND_HALF_DIAG = GROUND_DIAG / 2;
 
         const groundGeom = new THREE.BoxGeometry(GROUND_SIZE, GROUND_HEIGHT, GROUND_SIZE);
-        const groundMat = new THREE.MeshPhongMaterial(
-            {
-                color: 0x00FF00,
-                shininess: 0,
-            }
-        );
+        const uvs = groundGeom.getAttribute('uv');
+        for (let i = 0; i < uvs.array.length; i++)
+        {
+            console.log(uvs[i] instanceof Number);
+            uvs.array[i] *= 16;
+        }
+        uvs.needsUpdate = true;
+        groundGeom.setAttribute('uv', uvs);
+        const groundMat = new THREE.MeshPhongMaterial({shininess: 0});
         const groundMesh = new THREE.Mesh(groundGeom, groundMat);
         groundMesh.position.setY(-GROUND_HEIGHT / 2);
         groundMesh.receiveShadow = true;
         groundMesh.castShadow = true;
         scene.add(groundMesh);
+
+        new THREE.TextureLoader().load("assets/ground/ground.jpg", texture =>
+        {
+            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+            groundMat.map = texture;
+            groundMat.needsUpdate = true;
+        });
 
 
 
@@ -192,20 +220,20 @@
 
 
         // DIRLIGHT
-        const dirLight = new THREE.DirectionalLight(0xFFFFFF, 0.5);
-        dirLight.castShadow = true;
-        dirLight.shadowMapWidth = 4096;
-        dirLight.shadowMapHeight = 4096;
-        dirLight.position.set(1, 1, -1);
-        dirLight.position.normalize();
-        dirLight.position.multiplyScalar(GROUND_HALF_DIAG);
-        scene.add(dirLight);
-        const dirLightHelper = new THREE.DirectionalLightHelper(dirLight);
+        const sunDirLight = new THREE.DirectionalLight(0xFFFFFF, 0.5);
+        sunDirLight.castShadow = true;
+        sunDirLight.shadowMapWidth = 4096;
+        sunDirLight.shadowMapHeight = 4096;
+        sunDirLight.position.set(1, 1, -1);
+        sunDirLight.position.normalize();
+        sunDirLight.position.multiplyScalar(GROUND_HALF_DIAG);
+        scene.add(sunDirLight);
+        const dirLightHelper = new THREE.DirectionalLightHelper(sunDirLight);
         scene.add(dirLightHelper);
-        dirLight.shadow.camera = new THREE.OrthographicCamera(-GROUND_HALF_DIAG, GROUND_HALF_DIAG, GROUND_HALF_DIAG, -GROUND_HALF_DIAG, 0, GROUND_DIAG);
+        sunDirLight.shadow.camera = new THREE.OrthographicCamera(-GROUND_HALF_DIAG, GROUND_HALF_DIAG, GROUND_HALF_DIAG, -GROUND_HALF_DIAG, 0, GROUND_DIAG);
 
-        // Moves the dirLight's target on a circular path to simulate sun.
-        updaters.Register(dirLight, dirLight =>
+        // Moves the sunDirLight's target on a circular path to simulate sun.
+        updaters.Register(sunDirLight, dirLight =>
         {
             if (dirLight.Initialized !== true)
             {
@@ -214,10 +242,22 @@
                 dirLight.RotationAxis = new THREE.Vector3(1, 0, 1).normalize();
             }
 
+            const speedButton = " ";
+            const speedMult = 10;
+
+            if (Input.KeyWasPressed(speedButton))
+            {
+                dirLight.AngularSpeed *= speedMult;
+            }
+            else if (Input.KeyWasReleased(speedButton))
+            {
+                dirLight.AngularSpeed /= speedMult;
+            }
+
             dirLight.position.applyAxisAngle(dirLight.RotationAxis, THREE.MathUtils.degToRad(dirLight.AngularSpeed * Time.DeltaTime));
         });
 
-        // Updates the dirLight helper.
+        // Updates the sunDirLight helper.
         updaters.Register(dirLightHelper, (dirLightHelper) => dirLightHelper.update());
 
 
@@ -236,7 +276,7 @@
                     .load("loco.obj", loco =>
                     {
                         scene.add(loco);
-                        loco.position.set(0, 2.3, 0);
+                        loco.position.set(0, 2.56, 0);
                         loco.castShadow = true;
                         loco.receiveShadow = true;
                         loco.traverse(child =>
@@ -245,26 +285,60 @@
                             child.receiveShadow = true;
                         });
 
-                        updaters.Register(loco, loco =>
+                        const spotLightTarget = new THREE.Object3D();
+                        const spotLight = new THREE.SpotLight();
+                        const spotLightHelper = new THREE.SpotLightHelper(spotLight);
+                        loco.add(spotLight);
+                        loco.add(spotLightTarget);
+                        scene.add(spotLightHelper);
+                        spotLightTarget.position.set(0, 0 , -10);
+                        spotLight.position.set(0, 0, -7.5);
+                        spotLight.target = spotLightTarget;
+                        spotLight.castShadow = true;
+                        spotLight.shadowMapWidth = 2048;
+                        spotLight.shadowMapHeight = 2048;
+
+                        updaters.Register(spotLightHelper, spotLightHelper =>
                         {
-                            const movementSpeed = 5;
-                            const rotatationSpeed = THREE.MathUtils.degToRad(10);
-                            const rotationAxis = new THREE.Vector3(0, 1, 0);
-                            if (Input.KeyIsPressed("ArrowUp"))
+                            spotLightHelper.update();
+                        });
+
+                        updaters.Register(loco, function LocoMovement(loco)
+                        {
+                            if (typeof(LocoMovement.FrontGround) === 'undefined')
                             {
-                                //loco.rotateOnWorldAxis(rotationAxis, rotatationSpeed * Time.DeltaTime);
-                                let newPos = new THREE.Vector3();
-                                loco.getWorldDirection(newPos);
-                                newPos.multiplyScalar(-1).multiplyScalar(movementSpeed).multiplyScalar(Time.DeltaTime);
-                                loco.position.add(newPos);
+                                LocoMovement.FrontGround = groundMesh;
+                                LocoMovement.BackGround = groundMesh;
                             }
-                            if (Input.KeyIsPressed("ArrowDown"))
+                            const movementSpeed = 30;
+
+                            if (Input.KeyIsDown("ArrowUp"))
                             {
-                                //loco.rotateOnWorldAxis(rotationAxis, -rotatationSpeed * Time.DeltaTime);
-                                let newPos = new THREE.Vector3();
-                                loco.getWorldDirection(newPos);
-                                newPos.multiplyScalar(movementSpeed).multiplyScalar(Time.DeltaTime);
-                                loco.position.add(newPos);
+                                const delta = new THREE.Vector3();
+                                loco.getWorldDirection(delta);
+                                delta.multiplyScalar(-1).multiplyScalar(movementSpeed).multiplyScalar(Time.DeltaTime);
+                                loco.position.add(delta);
+
+                                if (loco.position.z < LocoMovement.FrontGround.position.z)
+                                {
+                                    LocoMovement.FrontGround = LocoMovement.FrontGround.clone(true);
+                                    LocoMovement.FrontGround.translateZ(-GROUND_SIZE);
+                                    scene.add(LocoMovement.FrontGround);
+                                }
+                            }
+                            if (Input.KeyIsDown("ArrowDown"))
+                            {
+                                const delta = new THREE.Vector3();
+                                loco.getWorldDirection(delta);
+                                delta.multiplyScalar(movementSpeed).multiplyScalar(Time.DeltaTime);
+                                loco.position.add(delta);
+
+                                if (loco.position.z > LocoMovement.BackGround.position.z)
+                                {
+                                    LocoMovement.BackGround = LocoMovement.BackGround.clone(true);
+                                    LocoMovement.BackGround.translateZ(GROUND_SIZE);
+                                    scene.add(LocoMovement.BackGround);
+                                }
                             }
                         });
                     });
@@ -276,12 +350,10 @@
         const RAILBOARD_WIDTH = 4;
         const RAILBOARD_HEIGHT = 0.1;
         const RAILBOARD_DEPTH = 1;
-        const RAILBOARD_SPACING = 0.4;
+        const RAILBOARD_SPACING = 1;
         const RAIL_WIDTH = 0.1;
         const RAIL_HEIGHT = 0.25;
-        const RAIL_DEPTH = RAILBOARD_DEPTH + 2 * RAILBOARD_SPACING;
-        const RAILBLOCK_WIDTH = RAILBOARD_WIDTH;
-        const RAILBLOCK_HEIGHT = RAIL_HEIGHT + RAILBOARD_HEIGHT;
+        const RAIL_DEPTH = RAILBOARD_DEPTH + RAILBOARD_SPACING / 2;
         const RAILBLOCK_DEPTH = RAIL_DEPTH;
 
         const railGeom = new THREE.BoxGeometry(RAIL_WIDTH, RAIL_HEIGHT, RAIL_DEPTH);
@@ -306,7 +378,6 @@
             }
         )
         const boardMesh = new THREE.Mesh(boardGeom, boardMat);
-        boardMesh.position.setZ(RAIL_DEPTH * 0.5 - RAILBOARD_DEPTH / 2 - RAILBOARD_SPACING)
         boardMesh.position.setY(RAILBOARD_HEIGHT * 0.5);
 
         const railBlock = new THREE.Group();
@@ -319,11 +390,11 @@
             child.castShadow = true;
         });
 
-        for (let i = 0; i < 30; i++)
+        for (let i = 0; i < 40; i++)
         {
             let railCopy = railBlock.clone();
-            railCopy.position.setZ(-25 + i * RAILBLOCK_DEPTH);
-            scene.add(railCopy);
+            railCopy.position.setZ((-GROUND_SIZE + RAILBLOCK_DEPTH) / 2.0 + i * RAILBLOCK_DEPTH);
+            groundMesh.add(railCopy);
         }
 
         new THREE.TextureLoader().load("assets/rails/wood.jpg", texture =>
