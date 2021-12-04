@@ -183,13 +183,16 @@
 
     function CreateObjects(scene, updaters)
     {
+        let isNight = false;
+
         // GROUND
         const GROUND_SIZE = 60;
         const GROUND_HEIGHT = 0.1;
         const GROUND_DIAG = GROUND_SIZE * Math.sqrt(2);
         const GROUND_HALF_DIAG = GROUND_DIAG / 2;
 
-        const groundGeom = new THREE.BoxGeometry(GROUND_SIZE, GROUND_HEIGHT, GROUND_SIZE);
+        //const groundGeom = new THREE.BoxGeometry(GROUND_SIZE, GROUND_HEIGHT, GROUND_SIZE);
+        const groundGeom = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE);
         const uvs = groundGeom.getAttribute('uv');
         for (let i = 0; i < uvs.array.length; i++)
         {
@@ -198,11 +201,15 @@
         }
         uvs.needsUpdate = true;
         groundGeom.setAttribute('uv', uvs);
-        const groundMat = new THREE.MeshPhongMaterial({shininess: 0});
+        const groundMat = new THREE.MeshPhongMaterial(
+        {
+            shininess: 0,
+            side: THREE.DoubleSide
+        });
         const groundMesh = new THREE.Mesh(groundGeom, groundMat);
         groundMesh.position.setY(-GROUND_HEIGHT / 2);
+        groundMesh.rotateX(THREE.MathUtils.degToRad(-90))
         groundMesh.receiveShadow = true;
-        groundMesh.castShadow = true;
         scene.add(groundMesh);
 
         new THREE.TextureLoader().load("assets/ground/ground.jpg", texture =>
@@ -255,6 +262,17 @@
             }
 
             dirLight.position.applyAxisAngle(dirLight.RotationAxis, THREE.MathUtils.degToRad(dirLight.AngularSpeed * Time.DeltaTime));
+
+            if (dirLight.position.y < 0)
+            {
+                isNight = true;
+                dirLight.intensity = 0;
+            }
+            else
+            {
+                isNight = false;
+                dirLight.intensity = 1;
+            }
         });
 
         // Updates the sunDirLight helper.
@@ -298,6 +316,11 @@
                         spotLight.shadowMapWidth = 2048;
                         spotLight.shadowMapHeight = 2048;
 
+                        updaters.Register(spotLight, spotLight =>
+                        {
+                            spotLight.intensity = isNight;
+                        });
+
                         updaters.Register(spotLightHelper, spotLightHelper =>
                         {
                             spotLightHelper.update();
@@ -322,7 +345,7 @@
                                 if (loco.position.z < LocoMovement.FrontGround.position.z)
                                 {
                                     LocoMovement.FrontGround = LocoMovement.FrontGround.clone(true);
-                                    LocoMovement.FrontGround.translateZ(-GROUND_SIZE);
+                                    LocoMovement.FrontGround.position.z -= GROUND_SIZE;
                                     scene.add(LocoMovement.FrontGround);
                                 }
                             }
@@ -336,7 +359,7 @@
                                 if (loco.position.z > LocoMovement.BackGround.position.z)
                                 {
                                     LocoMovement.BackGround = LocoMovement.BackGround.clone(true);
-                                    LocoMovement.BackGround.translateZ(GROUND_SIZE);
+                                    LocoMovement.BackGround.position.z += GROUND_SIZE;
                                     scene.add(LocoMovement.BackGround);
                                 }
                             }
@@ -390,11 +413,14 @@
             child.castShadow = true;
         });
 
+        const railGroup = new THREE.Group();
+        railGroup.rotateX(-groundMesh.rotation.x);
+        groundMesh.add(railGroup);
         for (let i = 0; i < 40; i++)
         {
             let railCopy = railBlock.clone();
             railCopy.position.setZ((-GROUND_SIZE + RAILBLOCK_DEPTH) / 2.0 + i * RAILBLOCK_DEPTH);
-            groundMesh.add(railCopy);
+            railGroup.add(railCopy);
         }
 
         new THREE.TextureLoader().load("assets/rails/wood.jpg", texture =>
