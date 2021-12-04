@@ -16,7 +16,8 @@
             width: 100%;
             height: 100%
         }
-        #caption {
+        #caption
+        {
             position: absolute;
             top: 10px;
             left: 10px;
@@ -26,7 +27,8 @@
             display:block;
             color: mediumpurple;
         }
-        #info {
+        #info
+        {
             position: absolute;
             top: 30px;
             left: 10px;
@@ -37,15 +39,49 @@
             color: cyan;
             opacity: 1.0;
         }
+        #caption2
+        {
+             position: absolute;
+             bottom: 55px;
+             left: 10px;
+             width: 50%;
+             text-align: left;
+             z-index: 100;
+             display:block;
+             color: mediumpurple;
+         }
+        #info2
+        {
+            position: absolute;
+            bottom: 0;
+            left: 10px;
+            width: 50%;
+            text-align: left;
+            z-index: 100;
+            display:block;
+            color: orangered;
+            opacity: 1.0;
+        }
     </style>
 </head>
 
 <body>
 <div id="caption">
+    Én:
+</div>
+<div id="info">
     Löffler Levente <br/>
     R1NO3R <br/>
     Programtervező Informatikus BSc. <br/>
     2021/2022/1
+</div>
+<div id="caption2">
+    Irányítás:
+</div>
+<div id="info2">
+    Space lenttartása: nap felgyorsítása <br/>
+    Fel-le nyilak: mozdony mozgatása <br/>
+    Egér: drag kamera irányítás
 </div>
 <script type="module">
     import * as THREE from './js-r132/build/three.module.js';
@@ -218,6 +254,7 @@
             {
                 const caption = document.getElementById("caption");
                 caption.style.display = caption.style.display === "none" ? "block" : "none";
+                document.getElementById("info").style.display = caption.style.display;
             }
         });
 
@@ -284,7 +321,9 @@
                 dayFunc: sunDirLight.SetDay,
                 nightFunc: sunDirLight.SetNight,
                 spotLightOn: false,
-                dirLightOn: true
+                dirLightOn: true,
+                locoSpeed: 20,
+                locoReset: null
             };
 
 
@@ -330,10 +369,9 @@
         // Updates the sunDirLight helper.
         updaters.Register(dirLightHelper, (dirLightHelper) => dirLightHelper.update());
 
-
-
         // LOCO MODEL
         let locoSpotLight;
+        let outerLoco;
         const loadingManager = new THREE.LoadingManager();
         new MTLLoader(loadingManager)
             .setPath("assets/loco/")
@@ -354,6 +392,8 @@
                             child.castShadow = true;
                             child.receiveShadow = true;
                         });
+
+                        outerLoco = loco;
 
                         const spotLightTarget = new THREE.Object3D();
                         locoSpotLight = new THREE.SpotLight();
@@ -403,13 +443,12 @@
                                 LocoMovement.FrontGround = groundMesh;
                                 LocoMovement.BackGround = groundMesh;
                             }
-                            const movementSpeed = 30;
 
                             if (Input.KeyIsDown("ArrowUp"))
                             {
                                 const delta = new THREE.Vector3();
                                 loco.getWorldDirection(delta);
-                                delta.multiplyScalar(-1).multiplyScalar(movementSpeed).multiplyScalar(Time.DeltaTime);
+                                delta.multiplyScalar(-1).multiplyScalar(guiParams.locoSpeed).multiplyScalar(Time.DeltaTime);
                                 loco.position.add(delta);
 
                                 if (loco.position.z < LocoMovement.FrontGround.position.z)
@@ -423,7 +462,7 @@
                             {
                                 const delta = new THREE.Vector3();
                                 loco.getWorldDirection(delta);
-                                delta.multiplyScalar(movementSpeed).multiplyScalar(Time.DeltaTime);
+                                delta.multiplyScalar(guiParams.locoSpeed).multiplyScalar(Time.DeltaTime);
                                 loco.position.add(delta);
 
                                 if (loco.position.z > LocoMovement.BackGround.position.z)
@@ -500,10 +539,13 @@
         });
 
         const gui = new GUI();
+        guiParams.locoReset = () => outerLoco.position.setZ(0);
         gui.add(guiParams, 'dayFunc').name("Reggel");
-        gui.add(guiParams, 'nightFunc').name("Éccaka");
+        gui.add(guiParams, 'nightFunc').name("Éjszaka");
         gui.add(guiParams, 'spotLightOn').name("Vonat Reflektor").onChange(e => locoSpotLight.intensity = 1 - locoSpotLight.intensity).listen();
         gui.add(guiParams, 'dirLightOn').name("Nap").onChange(e => sunDirLight.intensity = 1 - sunDirLight.intensity).listen();
+        gui.add(guiParams, 'locoSpeed', 1, 1000).step(2).name("Vonat Sebesség");
+        gui.add(guiParams, 'locoReset').name("Vonat vissza");
     }
 
 
