@@ -16,15 +16,43 @@
             width: 100%;
             height: 100%
         }
+        #caption {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            width: 50%;
+            text-align: left;
+            z-index: 100;
+            display:block;
+            color: mediumpurple;
+        }
+        #info {
+            position: absolute;
+            top: 30px;
+            left: 10px;
+            width: 50%;
+            text-align: left;
+            z-index: 100;
+            display:block;
+            color: cyan;
+            opacity: 1.0;
+        }
     </style>
 </head>
 
 <body>
+<div id="caption">
+    Löffler Levente <br/>
+    R1NO3R <br/>
+    Programtervező Informatikus BSc. <br/>
+    2021/2022/1
+</div>
 <script type="module">
     import * as THREE from './js-r132/build/three.module.js';
     import {TrackballControls} from './js-r132/examples/jsm/controls/TrackballControls.js';
     import {OBJLoader} from "./js-r132/examples/jsm/loaders/OBJLoader.js";
     import {MTLLoader} from "./js-r132/examples/jsm/loaders/MTLLoader.js";
+    import {GUI} from "./js-r132/examples/jsm/libs/dat.gui.module.js";
 
 
     class UpdaterCollection
@@ -183,6 +211,16 @@
 
     function CreateObjects(scene, updaters)
     {
+        // Info panel setter
+        updaters.Register(new THREE.Object3D(), object =>
+        {
+            if (Input.KeyWasPressed("i"))
+            {
+                const caption = document.getElementById("caption");
+                caption.style.display = caption.style.display === "none" ? "block" : "none";
+            }
+        });
+
         let isNight = false;
 
         // GROUND
@@ -191,12 +229,10 @@
         const GROUND_DIAG = GROUND_SIZE * Math.sqrt(2);
         const GROUND_HALF_DIAG = GROUND_DIAG / 2;
 
-        //const groundGeom = new THREE.BoxGeometry(GROUND_SIZE, GROUND_HEIGHT, GROUND_SIZE);
         const groundGeom = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE);
         const uvs = groundGeom.getAttribute('uv');
         for (let i = 0; i < uvs.array.length; i++)
         {
-            console.log(uvs[i] instanceof Number);
             uvs.array[i] *= 16;
         }
         uvs.needsUpdate = true;
@@ -239,6 +275,19 @@
         scene.add(dirLightHelper);
         sunDirLight.shadow.camera = new THREE.OrthographicCamera(-GROUND_HALF_DIAG, GROUND_HALF_DIAG, GROUND_HALF_DIAG, -GROUND_HALF_DIAG, 0, GROUND_DIAG);
 
+        // This is horrible but I need it
+        sunDirLight.SetNight = () => sunDirLight.position.set(-GROUND_SIZE / 2.0, 0, GROUND_SIZE / 2.0);
+        sunDirLight.SetDay = () => sunDirLight.position.set(GROUND_SIZE / 2.0, 0, -GROUND_SIZE / 2.0);
+
+        const guiParams =
+            {
+                dayFunc: sunDirLight.SetDay,
+                nightFunc: sunDirLight.SetNight,
+                spotLightOn: false,
+                dirLightOn: true
+            };
+
+
         // Moves the sunDirLight's target on a circular path to simulate sun.
         updaters.Register(sunDirLight, dirLight =>
         {
@@ -263,15 +312,18 @@
 
             dirLight.position.applyAxisAngle(dirLight.RotationAxis, THREE.MathUtils.degToRad(dirLight.AngularSpeed * Time.DeltaTime));
 
-            if (dirLight.position.y < 0)
+            if (dirLight.position.y < 0 && !isNight)
             {
                 isNight = true;
                 dirLight.intensity = 0;
+                guiParams.dirLightOn = false;
             }
-            else
+
+            if (dirLight.position.y >= 0 && isNight)
             {
                 isNight = false;
                 dirLight.intensity = 1;
+                guiParams.dirLightOn = true;
             }
         });
 
@@ -280,8 +332,8 @@
 
 
 
-
         // LOCO MODEL
+        let locoSpotLight;
         const loadingManager = new THREE.LoadingManager();
         new MTLLoader(loadingManager)
             .setPath("assets/loco/")
@@ -304,21 +356,39 @@
                         });
 
                         const spotLightTarget = new THREE.Object3D();
-                        const spotLight = new THREE.SpotLight();
-                        const spotLightHelper = new THREE.SpotLightHelper(spotLight);
-                        loco.add(spotLight);
+                        locoSpotLight = new THREE.SpotLight();
+                        const spotLightHelper = new THREE.SpotLightHelper(locoSpotLight);
+                        loco.add(locoSpotLight);
                         loco.add(spotLightTarget);
                         scene.add(spotLightHelper);
                         spotLightTarget.position.set(0, 0 , -10);
-                        spotLight.position.set(0, 0, -7.5);
-                        spotLight.target = spotLightTarget;
-                        spotLight.castShadow = true;
-                        spotLight.shadowMapWidth = 2048;
-                        spotLight.shadowMapHeight = 2048;
+                        locoSpotLight.position.set(0, 0, -7.5);
+                        locoSpotLight.target = spotLightTarget;
+                        locoSpotLight.castShadow = true;
+                        locoSpotLight.shadowMapWidth = 2048;
+                        locoSpotLight.shadowMapHeight = 2048;
 
-                        updaters.Register(spotLight, spotLight =>
+                        updaters.Register(locoSpotLight, function LocoSpotUpdater(spotLight)
                         {
-                            spotLight.intensity = isNight;
+                            if (typeof(LocoSpotUpdater.Night) === 'undefined')
+                            {
+                                // Whether the light is acting as if its night
+                                LocoSpotUpdater.Night = false;
+                                spotLight.intensity = 0;
+                            }
+
+                            if (LocoSpotUpdater.Night && !isNight)
+                            {
+                                spotLight.intensity = 0;
+                                LocoSpotUpdater.Night = false;
+                                guiParams.spotLightOn = false;
+                            }
+                            else if (!LocoSpotUpdater.Night && isNight)
+                            {
+                                spotLight.intensity = 1;
+                                LocoSpotUpdater.Night = true;
+                                guiParams.spotLightOn = true;
+                            }
                         });
 
                         updaters.Register(spotLightHelper, spotLightHelper =>
@@ -428,6 +498,12 @@
             boardMat.map = texture;
             boardMat.needsUpdate = true;
         });
+
+        const gui = new GUI();
+        gui.add(guiParams, 'dayFunc').name("Reggel");
+        gui.add(guiParams, 'nightFunc').name("Éccaka");
+        gui.add(guiParams, 'spotLightOn').name("Vonat Reflektor").onChange(e => locoSpotLight.intensity = 1 - locoSpotLight.intensity).listen();
+        gui.add(guiParams, 'dirLightOn').name("Nap").onChange(e => sunDirLight.intensity = 1 - sunDirLight.intensity).listen();
     }
 
 
