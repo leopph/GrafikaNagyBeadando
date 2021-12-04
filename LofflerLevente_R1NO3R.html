@@ -68,6 +68,62 @@
     }
 
 
+    class Input
+    {
+        static UP = Symbol("UP");
+        static DOWN = Symbol("DOWN");
+        static HELD = Symbol("HELD");
+        static RELEASED = Symbol("RELEASED");
+
+        static #m_Keys = new Map();
+
+        static SetKey(key, state)
+        {
+            if (state === Input.DOWN && Input.#m_Keys.get(key) === Input.DOWN)
+            {
+                Input.#m_Keys.set(key, Input.HELD);
+            }
+            else
+            {
+                Input.#m_Keys.set(key, state);
+            }
+        }
+
+        static KeyIsPressed(key)
+        {
+            return Input.#m_Keys.get(key) === Input.DOWN || Input.#m_Keys.get(key) === Input.HELD;
+        }
+
+        static UpdateUppedKeys()
+        {
+            Input.#m_Keys.forEach((value, key) =>
+            {
+                if (value === Input.UP)
+                {
+                    Input.#m_Keys.set(key, Input.RELEASED);
+                }
+            });
+        }
+    }
+
+
+    class Time
+    {
+        static #m_Clock = new THREE.Clock(true);
+        static #m_LastDelta = 0;
+
+        static Update()
+        {
+            Time.#m_LastDelta = Time.#m_Clock.getDelta();
+        }
+
+        static get DeltaTime()
+        {
+            return Time.#m_LastDelta;
+        }
+    }
+
+
     function CreateRenderer()
     {
         const renderer = new THREE.WebGLRenderer({antialias: true});
@@ -100,6 +156,8 @@
     function UpdateAndRender(controls, updaters, renderer, scene, camera)
     {
         controls.update();
+        Time.Update();
+        Input.UpdateUppedKeys();
         updaters.Run();
         renderer.render(scene, camera);
     }
@@ -154,10 +212,9 @@
                 dirLight.Initialized = true;
                 dirLight.AngularSpeed = 2;
                 dirLight.RotationAxis = new THREE.Vector3(1, 0, 1).normalize();
-                dirLight.Clock = new THREE.Clock(true);
             }
 
-            dirLight.position.applyAxisAngle(dirLight.RotationAxis, THREE.MathUtils.degToRad(dirLight.AngularSpeed * dirLight.Clock.getDelta()));
+            dirLight.position.applyAxisAngle(dirLight.RotationAxis, THREE.MathUtils.degToRad(dirLight.AngularSpeed * Time.DeltaTime));
         });
 
         // Updates the dirLight helper.
@@ -184,8 +241,31 @@
                         loco.receiveShadow = true;
                         loco.traverse(child =>
                         {
-                           child.castShadow = true;
-                           child.receiveShadow = true;
+                            child.castShadow = true;
+                            child.receiveShadow = true;
+                        });
+
+                        updaters.Register(loco, loco =>
+                        {
+                            const movementSpeed = 5;
+                            const rotatationSpeed = THREE.MathUtils.degToRad(10);
+                            const rotationAxis = new THREE.Vector3(0, 1, 0);
+                            if (Input.KeyIsPressed("ArrowUp"))
+                            {
+                                //loco.rotateOnWorldAxis(rotationAxis, rotatationSpeed * Time.DeltaTime);
+                                let newPos = new THREE.Vector3();
+                                loco.getWorldDirection(newPos);
+                                newPos.multiplyScalar(-1).multiplyScalar(movementSpeed).multiplyScalar(Time.DeltaTime);
+                                loco.position.add(newPos);
+                            }
+                            if (Input.KeyIsPressed("ArrowDown"))
+                            {
+                                //loco.rotateOnWorldAxis(rotationAxis, -rotatationSpeed * Time.DeltaTime);
+                                let newPos = new THREE.Vector3();
+                                loco.getWorldDirection(newPos);
+                                newPos.multiplyScalar(movementSpeed).multiplyScalar(Time.DeltaTime);
+                                loco.position.add(newPos);
+                            }
                         });
                     });
             });
@@ -261,6 +341,9 @@
         const camera = CreateCamera(0, 10, 20, scene.position);
         const controls = CreateControls(camera, renderer.domElement);
         const updaters = new UpdaterCollection();
+
+        document.addEventListener('keydown', e => Input.SetKey(e.key, Input.DOWN));
+        document.addEventListener('keyup', e => Input.SetKey(e.key, Input.UP));
 
         CreateObjects(scene, updaters);
 
