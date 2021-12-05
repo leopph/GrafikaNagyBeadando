@@ -42,7 +42,7 @@
         #caption2
         {
              position: absolute;
-             bottom: 55px;
+             bottom: 70px;
              left: 10px;
              width: 50%;
              text-align: left;
@@ -81,7 +81,8 @@
 <div id="info2">
     Space lenttartása: nap felgyorsítása <br/>
     Fel-le nyilak: mozdony mozgatása <br/>
-    Egér: drag kamera irányítás
+    Egér: drag kamera irányítás <br/>
+    I: info panelek be/kikapcsolása
 </div>
 <script type="module">
     import * as THREE from './js-r132/build/three.module.js';
@@ -255,6 +256,8 @@
                 const caption = document.getElementById("caption");
                 caption.style.display = caption.style.display === "none" ? "block" : "none";
                 document.getElementById("info").style.display = caption.style.display;
+                document.getElementById("caption2").style.display = caption.style.display;
+                document.getElementById("info2").style.display = caption.style.display;
             }
         });
 
@@ -300,7 +303,7 @@
 
 
         // DIRLIGHT
-        const sunDirLight = new THREE.DirectionalLight(0xFFFFFF, 0.5);
+        const sunDirLight = new THREE.DirectionalLight(0xFFFFFF);
         sunDirLight.castShadow = true;
         sunDirLight.shadowMapWidth = 4096;
         sunDirLight.shadowMapHeight = 4096;
@@ -308,20 +311,20 @@
         sunDirLight.position.normalize();
         sunDirLight.position.multiplyScalar(GROUND_HALF_DIAG);
         scene.add(sunDirLight);
-        const dirLightHelper = new THREE.DirectionalLightHelper(sunDirLight);
-        scene.add(dirLightHelper);
         sunDirLight.shadow.camera = new THREE.OrthographicCamera(-GROUND_HALF_DIAG, GROUND_HALF_DIAG, GROUND_HALF_DIAG, -GROUND_HALF_DIAG, 0, GROUND_DIAG);
 
         // This is horrible but I need it
         sunDirLight.SetNight = () => sunDirLight.position.set(-GROUND_SIZE / 2.0, 0, GROUND_SIZE / 2.0);
         sunDirLight.SetDay = () => sunDirLight.position.set(GROUND_SIZE / 2.0, 0, -GROUND_SIZE / 2.0);
 
+        // This really shouldnt be declared here but visibility...
         const guiParams =
             {
                 dayFunc: sunDirLight.SetDay,
                 nightFunc: sunDirLight.SetNight,
-                spotLightOn: false,
                 dirLightOn: true,
+                spotLightOn: false,
+                pointLightsOn: false,
                 locoSpeed: 20,
                 locoReset: null
             };
@@ -366,12 +369,40 @@
             }
         });
 
-        // Updates the sunDirLight helper.
-        updaters.Register(dirLightHelper, (dirLightHelper) => dirLightHelper.update());
+
+        /* A set containing all pointlights for easy disabling
+         * Really shouldnt be just thrown in here... */
+        const pointLights = new Set();
+
+
+        function PointLightUpdater(pointLight)
+        {
+            if (typeof(pointLight.Night) === 'undefined')
+            {
+                // Whether the light is acting as if it's night
+                pointLight.Night = isNight;
+                pointLight.intensity = isNight && guiParams.pointLightsOn ? 1 : 0;
+                pointLights.add(pointLight);
+            }
+
+            if (pointLight.Night && !isNight)
+            {
+                pointLight.intensity = 0;
+                pointLight.Night = false;
+                guiParams.pointLightsOn = false;
+            }
+            else if (!pointLight.Night && isNight)
+            {
+                pointLight.intensity = 1;
+                pointLight.Night = true;
+                guiParams.pointLightsOn = true;
+            }
+        }
+
 
         // LOCO MODEL
-        let locoSpotLight;
-        let outerLoco;
+        let locoSpotLight; // this should not be in this scope
+        let outerLoco; // neither should this but GUI...
         const loadingManager = new THREE.LoadingManager();
         new MTLLoader(loadingManager)
             .setPath("assets/loco/")
@@ -397,10 +428,8 @@
 
                         const spotLightTarget = new THREE.Object3D();
                         locoSpotLight = new THREE.SpotLight();
-                        const spotLightHelper = new THREE.SpotLightHelper(locoSpotLight);
                         loco.add(locoSpotLight);
                         loco.add(spotLightTarget);
-                        scene.add(spotLightHelper);
                         spotLightTarget.position.set(0, 0 , -10);
                         locoSpotLight.position.set(0, 0, -7.5);
                         locoSpotLight.target = spotLightTarget;
@@ -410,30 +439,25 @@
 
                         updaters.Register(locoSpotLight, function LocoSpotUpdater(spotLight)
                         {
-                            if (typeof(LocoSpotUpdater.Night) === 'undefined')
+                            if (typeof(spotLight.Night) === 'undefined')
                             {
-                                // Whether the light is acting as if its night
-                                LocoSpotUpdater.Night = false;
+                                // Whether the light is acting as if it's night
+                                spotLight.Night = false;
                                 spotLight.intensity = 0;
                             }
 
-                            if (LocoSpotUpdater.Night && !isNight)
+                            if (spotLight.Night && !isNight)
                             {
                                 spotLight.intensity = 0;
-                                LocoSpotUpdater.Night = false;
+                                spotLight.Night = false;
                                 guiParams.spotLightOn = false;
                             }
-                            else if (!LocoSpotUpdater.Night && isNight)
+                            else if (!spotLight.Night && isNight)
                             {
                                 spotLight.intensity = 1;
-                                LocoSpotUpdater.Night = true;
+                                spotLight.Night = true;
                                 guiParams.spotLightOn = true;
                             }
-                        });
-
-                        updaters.Register(spotLightHelper, spotLightHelper =>
-                        {
-                            spotLightHelper.update();
                         });
 
                         updaters.Register(loco, function LocoMovement(loco)
@@ -442,6 +466,14 @@
                             {
                                 LocoMovement.FrontGround = groundMesh;
                                 LocoMovement.BackGround = groundMesh;
+                            }
+
+                            function RegisterPointLightChildren(child)
+                            {
+                                if (child instanceof THREE.PointLight)
+                                {
+                                    updaters.Register(child, PointLightUpdater);
+                                }
                             }
 
                             if (Input.KeyIsDown("ArrowUp"))
@@ -455,7 +487,10 @@
                                 {
                                     LocoMovement.FrontGround = LocoMovement.FrontGround.clone(true);
                                     LocoMovement.FrontGround.position.z -= GROUND_SIZE;
+                                    LocoMovement.FrontGround.scale.setX(-LocoMovement.FrontGround.scale.x);
                                     scene.add(LocoMovement.FrontGround);
+                                    // This is really terrible but im out of ideas
+                                    LocoMovement.FrontGround.traverse(RegisterPointLightChildren);
                                 }
                             }
                             if (Input.KeyIsDown("ArrowDown"))
@@ -469,7 +504,10 @@
                                 {
                                     LocoMovement.BackGround = LocoMovement.BackGround.clone(true);
                                     LocoMovement.BackGround.position.z += GROUND_SIZE;
+                                    LocoMovement.BackGround.scale.setX(-LocoMovement.BackGround.scale.x);
                                     scene.add(LocoMovement.BackGround);
+                                    // This is really terrible but im out of ideas;
+                                    LocoMovement.BackGround.traverse(RegisterPointLightChildren);
                                 }
                             }
                         });
@@ -538,10 +576,239 @@
             boardMat.needsUpdate = true;
         });
 
+
+        /* Train station model
+         * This is just pure chaos... */
+        const WALL_THICKNESS = 0.2;
+        const WALL_HEIGHT = 6;
+        const WALL_BIG_WIDTH = 3;
+        const WALL_MED_WIDTH = 2;
+        const WINDOW_HEIGHT = 1.5;
+        const WINDOW_WIDTH = 2;
+        const WINDOW_FILLER_HEIGHT = (WALL_HEIGHT - WINDOW_HEIGHT) / 2;
+        const BACK_WALL_Z_PLANE = -4.1;
+        const SIDE_WALL_WIDTH = 8;
+        const FRONT_WALL_Z_PLANE = BACK_WALL_Z_PLANE + WALL_THICKNESS + SIDE_WALL_WIDTH;
+        const ROOF_WIDTH = SIDE_WALL_WIDTH + 4;
+        const ROOF_HEIGHT = 3;
+        const ROOF_DEPTH = 4 * WINDOW_WIDTH + 5 * WALL_BIG_WIDTH;
+        const PILLAR_RADIUS = 0.25;
+        const PILLAR_Z_PLANE = FRONT_WALL_Z_PLANE + 3;
+
+        const stationGroup = new THREE.Group();
+        scene.add(stationGroup);
+
+        stationGroup.rotateOnWorldAxis(new THREE.Vector3(0, 1, 0), THREE.MathUtils.degToRad(90));
+        stationGroup.translateZ(-12);
+        groundMesh.add(stationGroup);
+        stationGroup.rotateOnWorldAxis(new THREE.Vector3(1, 0, 0), Math.PI / 2.0);
+
+        const wallMat = new THREE.MeshPhongMaterial(
+            {
+                color: 0xEEECD9,
+                shininess: 0
+            }
+        );
+
+        new THREE.TextureLoader().load("assets/station/wood.jpg", texture =>
+        {
+            wallMat.map = texture;
+            wallMat.needsUpdate = true;
+        });
+
+        const wallBigBlockGeom = new THREE.BoxGeometry(WALL_BIG_WIDTH, WALL_HEIGHT, WALL_THICKNESS);
+        const wallBigBlockMesh = new THREE.Mesh(wallBigBlockGeom, wallMat);
+        wallBigBlockMesh.position.set(-10, WALL_HEIGHT / 2, BACK_WALL_Z_PLANE);
+        wallBigBlockMesh.castShadow = true;
+        wallBigBlockMesh.receiveShadow = true;
+        stationGroup.add(wallBigBlockMesh);
+
+        const wallFillerBlockGeom = new THREE.BoxGeometry(WINDOW_WIDTH, WINDOW_FILLER_HEIGHT, WALL_THICKNESS);
+        const wallFillerBlockMesh = new THREE.Mesh(wallFillerBlockGeom, wallMat);
+        wallFillerBlockMesh.castShadow = true;
+        wallFillerBlockMesh.receiveShadow = true;
+
+        const windowGeom = new THREE.BoxGeometry(WINDOW_WIDTH, WINDOW_HEIGHT, WALL_THICKNESS);
+        const windowMat = new THREE.MeshPhongMaterial(
+            {
+                transparent: true,
+                opacity: 0.2,
+                color: 0x00007F,
+                side: THREE.DoubleSide
+            });
+        let windowMesh = new THREE.Mesh(windowGeom, windowMat);
+
+        for (let i = 0; i < 4; i++)
+        {
+            for (let j = 0; j < 2; j++)
+            {
+                let wallFillerBlockMeshCopy = wallFillerBlockMesh.clone();
+                wallFillerBlockMeshCopy.position.x = -10 + WALL_BIG_WIDTH / 2 + WINDOW_WIDTH / 2 + i * (WINDOW_WIDTH + WALL_BIG_WIDTH);
+                wallFillerBlockMeshCopy.position.y = j * (WINDOW_FILLER_HEIGHT + WINDOW_HEIGHT) + WINDOW_FILLER_HEIGHT / 2;
+                wallFillerBlockMeshCopy.position.z = BACK_WALL_Z_PLANE;
+                stationGroup.add(wallFillerBlockMeshCopy);
+            }
+
+            windowMesh = windowMesh.clone();
+            windowMesh.position.x = -10 + WALL_BIG_WIDTH / 2 + WINDOW_WIDTH / 2 + i * (WINDOW_WIDTH + WALL_BIG_WIDTH);
+            windowMesh.position.y = WINDOW_FILLER_HEIGHT + WINDOW_HEIGHT / 2;
+            windowMesh.position.z = BACK_WALL_Z_PLANE;
+            stationGroup.add(windowMesh);
+
+            let wallBigBlockCopy = wallBigBlockMesh.clone();
+            wallBigBlockCopy.position.x = -10 + (i + 1) * (WALL_BIG_WIDTH + WINDOW_WIDTH);
+            wallBigBlockCopy.position.y = WALL_HEIGHT / 2;
+            wallBigBlockCopy.position.z = BACK_WALL_Z_PLANE;
+            stationGroup.add(wallBigBlockCopy);
+        }
+
+        const sideWallGeom = new THREE.BoxGeometry(SIDE_WALL_WIDTH, WALL_HEIGHT, WALL_THICKNESS);
+        let sideWallMesh = new THREE.Mesh(sideWallGeom, wallMat);
+        sideWallMesh.position.set(-10 - WALL_BIG_WIDTH / 2 + WALL_THICKNESS / 2, WALL_HEIGHT / 2, BACK_WALL_Z_PLANE + SIDE_WALL_WIDTH / 2 + WALL_THICKNESS / 2);
+        sideWallMesh.rotation.y = THREE.MathUtils.degToRad(90);
+        sideWallMesh.castShadow = true;
+        sideWallMesh.receiveShadow = true;
+        stationGroup.add(sideWallMesh);
+
+        sideWallMesh = sideWallMesh.clone();
+        sideWallMesh.position.set(10 + WALL_BIG_WIDTH / 2 - WALL_THICKNESS / 2, WALL_HEIGHT / 2, BACK_WALL_Z_PLANE + SIDE_WALL_WIDTH / 2 + WALL_THICKNESS / 2);
+        sideWallMesh.rotation.y = THREE.MathUtils.degToRad(90);
+        stationGroup.add(sideWallMesh);
+
+        let wallBigBlockMeshCopy = wallBigBlockMesh.clone();
+        wallBigBlockMeshCopy.position.x = -10;
+        wallBigBlockMeshCopy.position.z = FRONT_WALL_Z_PLANE;
+        stationGroup.add(wallBigBlockMeshCopy);
+
+        for (let i = 0; i < 3; i++)
+        {
+            for (let j = 0; j < 2; j++)
+            {
+                let wallFillerBlocKMeshCopy = wallFillerBlockMesh.clone();
+                wallFillerBlocKMeshCopy.position.x = 10 + WALL_BIG_WIDTH / 2 - WINDOW_WIDTH / 2 - i * (WINDOW_WIDTH + WALL_BIG_WIDTH);
+                wallFillerBlocKMeshCopy.position.y = j * (WINDOW_FILLER_HEIGHT + WINDOW_HEIGHT) + WINDOW_FILLER_HEIGHT / 2;
+                wallFillerBlocKMeshCopy.position.z = FRONT_WALL_Z_PLANE;
+                stationGroup.add(wallFillerBlocKMeshCopy);
+            }
+
+            windowMesh = windowMesh.clone();
+            windowMesh.position.x = 10 + WALL_BIG_WIDTH / 2 - WINDOW_WIDTH / 2 - i * (WINDOW_WIDTH + WALL_BIG_WIDTH);
+            windowMesh.position.y = WINDOW_FILLER_HEIGHT + WINDOW_HEIGHT / 2;
+            windowMesh.position.z = FRONT_WALL_Z_PLANE;
+            stationGroup.add(windowMesh);
+        }
+
+        for (let i = 0; i < 3; i++)
+        {
+            let wallBigBlockMeshCopy = wallBigBlockMesh.clone();
+            wallBigBlockMeshCopy.position.x = 10 - WINDOW_WIDTH - i * (WALL_BIG_WIDTH + WINDOW_WIDTH);
+            wallBigBlockMeshCopy.position.z = FRONT_WALL_Z_PLANE;
+            stationGroup.add(wallBigBlockMeshCopy);
+        }
+
+        let wallMedBlockGeom = new THREE.BoxGeometry(WALL_MED_WIDTH, WALL_HEIGHT, WALL_THICKNESS);
+        let wallMedBlockMesh = new THREE.Mesh(wallMedBlockGeom, wallMat);
+        wallMedBlockMesh.position.x = 10 - WINDOW_WIDTH - WALL_BIG_WIDTH / 2 - WALL_MED_WIDTH / 2 - 2 * (WALL_BIG_WIDTH + WINDOW_WIDTH);
+        wallMedBlockMesh.position.y = WALL_HEIGHT / 2;
+        wallMedBlockMesh.position.z = FRONT_WALL_Z_PLANE;
+        wallMedBlockMesh.castShadow = true;
+        wallMedBlockMesh.receiveShadow = true;
+        stationGroup.add(wallMedBlockMesh);
+
+        new THREE.FontLoader().load("js-r132/examples/fonts/helvetiker_regular.typeface.json", font =>
+        {
+            let signTextGeom = new THREE.TextGeometry("Train Station",
+                {
+                    font: font,
+                    size: 1,
+                    height: 0.1
+                });
+            let signTextMat = new THREE.MeshPhongMaterial(
+                {
+                    color: 0xFF0000,
+                    shininess: 0
+                }
+            );
+            let signTextMesh = new THREE.Mesh(signTextGeom, signTextMat);
+            signTextMesh.castShadow = true;
+            signTextMesh.receiveShadow = true;
+            signTextMesh.position.z = FRONT_WALL_Z_PLANE + WALL_THICKNESS / 2
+            signTextMesh.position.y = 1.5 * WINDOW_HEIGHT + WINDOW_FILLER_HEIGHT;
+            signTextMesh.position.x -= 5;
+            stationGroup.add(signTextMesh);
+        });
+
+        const roofBase = new THREE.Shape();
+        roofBase.moveTo(0, 0);
+        roofBase.lineTo(ROOF_WIDTH, 0);
+        roofBase.lineTo(ROOF_WIDTH / 2, ROOF_HEIGHT);
+        roofBase.lineTo(0, 0);
+
+        const roofGeom = new THREE.ExtrudeGeometry(roofBase,
+            {
+                depth: ROOF_DEPTH,
+                bevelEnabled: false
+            });
+        const roofMat = new THREE.MeshPhongMaterial(
+            {
+                color: 0x333E50,
+                shininess: 0
+            }
+        )
+        const roofMesh = new THREE.Mesh(roofGeom, roofMat);
+        roofMesh.rotateY(THREE.MathUtils.degToRad(90));
+        roofMesh.translateX(-Math.abs(ROOF_WIDTH - Math.abs(roofMesh.position.z - BACK_WALL_Z_PLANE + WALL_THICKNESS / 2)));
+        roofMesh.translateY(WALL_HEIGHT);
+        roofMesh.translateZ(-Math.abs(10 + WALL_BIG_WIDTH / 2));
+        roofMesh.receiveShadow = true;
+        roofMesh.castShadow = true;
+        stationGroup.add(roofMesh);
+
+        const pillarGeom = new THREE.CylinderGeometry(PILLAR_RADIUS, PILLAR_RADIUS, WALL_HEIGHT);
+        let pillarMesh = new THREE.Mesh(pillarGeom, wallMat);
+        pillarMesh.position.x = -10;
+        pillarMesh.position.y = WALL_HEIGHT / 2;
+        pillarMesh.position.z = PILLAR_Z_PLANE
+        pillarMesh.receiveShadow = true;
+        pillarMesh.castShadow = true;
+        stationGroup.add(pillarMesh);
+
+        pillarMesh = pillarMesh.clone();
+        pillarMesh.position.x = 0;
+        stationGroup.add(pillarMesh);
+
+        pillarMesh = pillarMesh.clone();
+        pillarMesh.position.x = 10;
+        stationGroup.add(pillarMesh);
+
+        const stationPointLight0 = new THREE.PointLight();
+        stationPointLight0.distance = 20;
+        stationPointLight0.decay = 0.1;
+        stationPointLight0.castShadow = true;
+        stationGroup.add(stationPointLight0);
+        stationPointLight0.position.set(-2, 5, 0);
+
+        const stationPointLight1 = new THREE.PointLight();
+        stationPointLight1.distance = 15;
+        stationPointLight1.decay = 2;
+        stationPointLight1.castShadow = true;
+        stationGroup.add(stationPointLight1);
+        stationPointLight1.position.set(0, 5, 10);
+
+        updaters.Register(stationPointLight0, PointLightUpdater);
+        updaters.Register(stationPointLight1, PointLightUpdater);
+
         const gui = new GUI();
         guiParams.locoReset = () => outerLoco.position.setZ(0);
         gui.add(guiParams, 'dayFunc').name("Reggel");
         gui.add(guiParams, 'nightFunc').name("Éjszaka");
+        gui.add(guiParams, 'pointLightsOn').name("Állomás Fények").onChange(e =>
+        {
+            for (const pointLight of pointLights)
+            {
+                pointLight.intensity = 1 - pointLight.intensity;
+            }
+        }).listen();
         gui.add(guiParams, 'spotLightOn').name("Vonat Reflektor").onChange(e => locoSpotLight.intensity = 1 - locoSpotLight.intensity).listen();
         gui.add(guiParams, 'dirLightOn').name("Nap").onChange(e => sunDirLight.intensity = 1 - sunDirLight.intensity).listen();
         gui.add(guiParams, 'locoSpeed', 1, 1000).step(2).name("Vonat Sebesség");
