@@ -1,0 +1,34 @@
+Vonat test:
+    1. Kiindulás: kocka
+    2. Skálázás a mozdony testének megfelelően
+    4. Bevel
+    3. +Y face-en inset és extrude region a kazánházhoz
+    4. Új vertexek lefelé tolása és alakra skálázása
+    5. Bevel a kazánházon
+    6. Subdivide a fő testelem kazánház felöli oldalán
+    7. Extrude facek egy szimmetrikus csoportján
+    8. Az új vertexeken scale és move
+
+Kémény:
+    1. Kiindulás: henger
+    2. Vertex szám növelés, alakítás formára
+    3. Vonat testen elhelyezés N-menüben
+    4. Inset a felső facen
+    5. Extrude az insetelt facen
+
+1 db kerék:
+    1. Kiindulás: kör
+    2. Extrude a körön
+    3. A keletkező henger két face-én inset
+    4. A két facen az inset belső részében minden második háromszög törlése
+    5. A két face középpontját egy éllel összekötni
+    6. A törlésből keletkező lyukakat lapokkal foltozni az insert face segítséségvel
+
+Kerekek elhelyezése:
+    Duplikáció és tengelyenkénti mozgatás a szimmetria megtartása érdekében
+
+Vonat testén nyílások:
+    1. Knife toolal polygonok formázása
+    2. Subdivide-dal új polygonok létrehozása
+    3. Kivágások
+    4. Insert face a megfelelő helyekre

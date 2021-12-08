@@ -1,0 +1,10 @@
+- Kezdő alakzat: icosphere.
+- Felvettem egy új vertexet, ez az ördögszekér gyökere.
+- Skin modifier bekapcsolása
+- Snap to faces bekapcsolása
+- Gyökérből extrudálás az icosphere felszínére
+- Az új csúcspont átméretezése
+- Az új csúcspontokból továbbiak készítése az icosphere felszínére extrudálással és átméretezéssel
+- Icosphere törlése
+- Vertexek automatikus uw unwrapelése
+- Új, diffúz színt produkáló material hozzáadása, specular szín 0-ra állítása
