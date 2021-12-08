@@ -182,15 +182,23 @@
     {
         static #m_Clock = new THREE.Clock(true);
         static #m_LastDelta = 0;
+        static #m_FullTime = 0;
 
         static Update()
         {
-            Time.#m_LastDelta = Time.#m_Clock.getDelta();
+            let elapsedTime = Time.#m_Clock.getElapsedTime();
+            Time.#m_LastDelta = elapsedTime - Time.#m_FullTime;
+            Time.#m_FullTime = elapsedTime;
         }
 
         static get DeltaTime()
         {
             return Time.#m_LastDelta;
+        }
+
+        static get FullTime()
+        {
+            return Time.#m_FullTime;
         }
     }
 
@@ -342,18 +350,11 @@
 
             dirLight.position.applyAxisAngle(dirLight.RotationAxis, THREE.MathUtils.degToRad(dirLight.AngularSpeed * Time.DeltaTime));
 
-            if (dirLight.position.y < 0 && !isNight)
+            if (dirLight.position.y < 0 !== isNight)
             {
-                isNight = true;
-                dirLight.visible = false;
-                guiParams.dirLightOn = false;
-            }
-
-            if (dirLight.position.y >= 0 && isNight)
-            {
-                isNight = false;
-                dirLight.visible = true;
-                guiParams.dirLightOn = true;
+                isNight = !isNight;
+                dirLight.visible = dirLight.position.y > 0;
+                guiParams.dirLightOn = dirLight.visible;
             }
         });
 
@@ -486,6 +487,42 @@
                                     LocoMovement.BackGround.traverse(RegisterPointLightChildren);
                                 }
                             }
+                        });
+                    });
+            });
+
+
+        // TUMBLEWEED
+        new MTLLoader(loadingManager)
+            .setPath("assets/tumbleweed/")
+            .load("tumbleweed.mtl", materials =>
+            {
+                materials.preload();
+                new OBJLoader(loadingManager)
+                    .setMaterials(materials)
+                    .setPath("assets/tumbleweed/")
+                    .load("tumbleweed.obj", weed =>
+                    {
+                        weed.traverse(child => child.castShadow = true);
+                        weed.position.set(7, 2, 0);
+                        scene.add(weed);
+
+                        updaters.Register(weed, weed =>
+                        {
+                            if (typeof(weed.YRotation) === "undefined")
+                            {
+                                weed.YRotation = 0;
+                                weed.YAxis = new THREE.Vector3(0, 1, 0);
+                                weed.XAxis = new THREE.Vector3(1, 0, 0);
+                                weed.ZAxis = new THREE.Vector3(0, 0, -1);
+                            }
+
+                            const thisFrameYRot = THREE.MathUtils.degToRad(-90) * Time.DeltaTime;
+                            weed.YRotation += thisFrameYRot;
+                            weed.position.y += Math.sin(Time.FullTime * 5) * Time.DeltaTime * 5;
+                            weed.rotateOnAxis(weed.XAxis, THREE.MathUtils.degToRad(-180) * Time.DeltaTime);
+                            weed.rotateOnWorldAxis(weed.YAxis, thisFrameYRot);
+                            weed.position.add(weed.ZAxis.clone().applyEuler(new THREE.Euler(0, weed.YRotation, 0)).multiplyScalar(5 * Time.DeltaTime));
                         });
                     });
             });
