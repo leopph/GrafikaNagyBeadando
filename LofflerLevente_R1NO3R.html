@@ -99,24 +99,12 @@
 
         Register(object, updater)
         {
-            if (!(object instanceof THREE.Object3D))
+            if (!this.#_updaters.has(object))
             {
-                throw "Trying to register updater on an invalid object...";
+                this.#_updaters.set(object, []);
             }
 
-            if (typeof updater !== "function")
-            {
-                throw "Trying to register an invalid updater...";
-            }
-
-            if (this.#_updaters.has(object))
-            {
-                this.#_updaters.get(object).add(updater);
-            }
-            else
-            {
-                this.#_updaters.set(object, [updater]);
-            }
+            this.#_updaters.get(object).push(updater);
         }
 
 
@@ -357,14 +345,14 @@
             if (dirLight.position.y < 0 && !isNight)
             {
                 isNight = true;
-                dirLight.intensity = 0;
+                dirLight.visible = false;
                 guiParams.dirLightOn = false;
             }
 
             if (dirLight.position.y >= 0 && isNight)
             {
                 isNight = false;
-                dirLight.intensity = 1;
+                dirLight.visible = true;
                 guiParams.dirLightOn = true;
             }
         });
@@ -381,21 +369,15 @@
             {
                 // Whether the light is acting as if it's night
                 pointLight.Night = isNight;
-                pointLight.intensity = isNight && guiParams.pointLightsOn ? 1 : 0;
+                pointLight.visible = isNight && guiParams.pointLightsOn;
                 pointLights.add(pointLight);
             }
 
-            if (pointLight.Night && !isNight)
+            if (pointLight.Night !== isNight)
             {
-                pointLight.intensity = 0;
-                pointLight.Night = false;
-                guiParams.pointLightsOn = false;
-            }
-            else if (!pointLight.Night && isNight)
-            {
-                pointLight.intensity = 1;
-                pointLight.Night = true;
-                guiParams.pointLightsOn = true;
+                pointLight.visible = isNight;
+                pointLight.Night = isNight;
+                guiParams.pointLightsOn = isNight;
             }
         }
 
@@ -442,21 +424,15 @@
                             if (typeof(spotLight.Night) === 'undefined')
                             {
                                 // Whether the light is acting as if it's night
-                                spotLight.Night = false;
-                                spotLight.intensity = 0;
+                                spotLight.Night = isNight;
+                                spotLight.visible = isNight;
                             }
 
-                            if (spotLight.Night && !isNight)
+                            if (spotLight.Night !== isNight)
                             {
-                                spotLight.intensity = 0;
-                                spotLight.Night = false;
-                                guiParams.spotLightOn = false;
-                            }
-                            else if (!spotLight.Night && isNight)
-                            {
-                                spotLight.intensity = 1;
-                                spotLight.Night = true;
-                                guiParams.spotLightOn = true;
+                                spotLight.visible = isNight;
+                                spotLight.Night = isNight;
+                                guiParams.spotLightOn = isNight;
                             }
                         });
 
@@ -806,11 +782,11 @@
         {
             for (const pointLight of pointLights)
             {
-                pointLight.intensity = 1 - pointLight.intensity;
+                pointLight.visible = !pointLight.visible;
             }
         }).listen();
-        gui.add(guiParams, 'spotLightOn').name("Vonat Reflektor").onChange(e => locoSpotLight.intensity = 1 - locoSpotLight.intensity).listen();
-        gui.add(guiParams, 'dirLightOn').name("Nap").onChange(e => sunDirLight.intensity = 1 - sunDirLight.intensity).listen();
+        gui.add(guiParams, 'spotLightOn').name("Vonat Reflektor").onChange(e => locoSpotLight.visible = !locoSpotLight.visible).listen();
+        gui.add(guiParams, 'dirLightOn').name("Nap").onChange(e => sunDirLight.visible = !sunDirLight.visible).listen();
         gui.add(guiParams, 'locoSpeed', 1, 1000).step(2).name("Vonat Sebesség");
         gui.add(guiParams, 'locoReset').name("Vonat vissza");
     }
