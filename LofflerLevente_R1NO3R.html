@@ -504,7 +504,7 @@
                     .load("tumbleweed.obj", weed =>
                     {
                         weed.traverse(child => child.castShadow = true);
-                        weed.position.set(7, 2, 0);
+                        weed.position.set(7, 1, 0);
                         scene.add(weed);
 
                         updaters.Register(weed, weed =>
@@ -515,14 +515,16 @@
                                 weed.YAxis = new THREE.Vector3(0, 1, 0);
                                 weed.XAxis = new THREE.Vector3(1, 0, 0);
                                 weed.ZAxis = new THREE.Vector3(0, 0, -1);
+                                weed.YPosOrig = weed.position.y;
                             }
 
                             const thisFrameYRot = THREE.MathUtils.degToRad(-90) * Time.DeltaTime;
-                            weed.YRotation += thisFrameYRot;
-                            weed.position.y += Math.sin(Time.FullTime * 5) * Time.DeltaTime * 5;
+                            weed.YRotation += thisFrameYRot;5
+                            weed.position.setY(weed.YPosOrig + (1 + Math.sin(Time.FullTime * 5)) * 0.5);
                             weed.rotateOnAxis(weed.XAxis, THREE.MathUtils.degToRad(-180) * Time.DeltaTime);
                             weed.rotateOnWorldAxis(weed.YAxis, thisFrameYRot);
                             weed.position.add(weed.ZAxis.clone().applyEuler(new THREE.Euler(0, weed.YRotation, 0)).multiplyScalar(5 * Time.DeltaTime));
+
                         });
                     });
             });
